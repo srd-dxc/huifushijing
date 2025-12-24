@@ -1,654 +1,703 @@
-
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>压力恢复试井智能分析</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
-    
-    <!-- 配置Tailwind自定义颜色和字体 -->
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#165DFF',
-                        secondary: '#36CFC9',
-                        accent: '#FF7D00',
-                        neutral: '#F5F7FA',
-                        dark: '#1D2129',
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'system-ui', 'sans-serif'],
-                    },
-                }
-            }
-        }
-    </script>
-    
-    <style type="text/tailwindcss">
-        @layer utilities {
-            .content-auto {
-                content-visibility: auto;
-            }
-            .card-shadow {
-                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-            }
-            .input-focus {
-                @apply focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none;
-            }
-        }
+    <title>交互式压力恢复试井单对数分析（Horner+MDH方法）</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .section { margin: 30px 0; padding: 20px; border: 1px solid #eee; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        h1, h2, h3 { color: #2c3e50; }
+        .param-group { margin-bottom: 20px; }
+        .result-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        .result-table th, .result-table td { border: 1px solid #ddd; padding: 12px; text-align: center; }
+        .result-table th { background-color: #f0f7ff; color: #2c3e50; font-weight: bold; }
+        .result-table tr:nth-child(even) { background-color: #f8f9fa; }
+        .result-table tr:hover { background-color: #eef7ff; }
+        .form-control { width: 100%; padding: 8px 12px; margin: 5px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        .form-row { display: flex; margin: 0 -10px; }
+        .form-col { flex: 1; padding: 0 10px; }
+        textarea.form-control { height: 150px; resize: vertical; }
+        .btn { background-color: #4285f4; color: white; padding: 10px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+        .btn:hover { background-color: #3367d6; }
+        .btn-reset { background-color: #f4b400; margin-left: 10px; }
+        .btn-reset:hover { background-color: #db9b00; }
+        canvas { width: 100% !important; height: 450px !important; margin: 20px 0; }
+        .data-help { font-size: 12px; color: #666; margin-top: 5px; }
+        .loading { display: none; text-align: center; padding: 20px; color: #4285f4; }
+        .chart-container { position: relative; margin: auto; padding: 20px; }
+        .axis-note { color: #666; font-size: 13px; margin: -15px 0 20px 0; }
     </style>
 </head>
-<body class="bg-gray-50 text-dark font-sans">
-    <!-- 页面头部 -->
-    <header class="bg-white shadow-sm sticky top-0 z-10">
-        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
-            <div class="flex items-center space-x-2">
-                <i class="fa fa-line-chart text-primary text-2xl"></i>
-                <h1 class="text-xl md:text-2xl font-bold text-primary">压力恢复试井智能分析</h1>
-            </div>
-            <button id="calculateBtn" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg transition-all duration-300 flex items-center">
-                <i class="fa fa-calculator mr-2"></i>
-                <span>开始分析</span>
-            </button>
+<body>
+    <div class="container">
+        <h1>交互式压力恢复试井单对数分析（Horner+MDH方法）</h1>
+        <p>基于Horner和MDH方法的压力恢复试井分析工具 | 支持自定义参数输入与实时计算</p>
+
+        <!-- 参数输入区域 -->
+        <div class="section">
+            <h2>1. 输入参数设置</h2>
+            <form id="wellParametersForm">
+                <div class="param-group">
+                    <h3>井与生产参数</h3>
+                    <div class="form-row">
+                        <div class="form-col">
+                            <label>关井前恒定产量 (q, m³/d)</label>
+                            <input type="number" step="0.1" class="form-control" id="q" value="779.1" required>
+                        </div>
+                        <div class="form-col">
+                            <label>关井前生产时间 (tp, h)</label>
+                            <input type="number" step="1" class="form-control" id="tp" value="310" required>
+                        </div>
+                        <div class="form-col">
+                            <label>关井时刻井底流压 (pwf(tp), MPa)</label>
+                            <input type="number" step="0.01" class="form-control" id="pwf_tp" value="19.04" required>
+                        </div>
+                        <div class="form-col">
+                            <label>井筒半径 (rw, m)</label>
+                            <input type="number" step="0.0001" class="form-control" id="rw" value="0.1079" required>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="param-group">
+                    <h3>储层参数</h3>
+                    <div class="form-row">
+                        <div class="form-col">
+                            <label>总压缩系数 (Ct, MPa⁻¹)</label>
+                            <input type="number" step="0.000001" class="form-control" id="Ct" value="0.003278" required>
+                        </div>
+                        <div class="form-col">
+                            <label>有效厚度 (h, m)</label>
+                            <input type="number" step="0.1" class="form-control" id="h" value="146.9" required>
+                        </div>
+                        <div class="form-col">
+                            <label>原油黏度 (mu, mPa·s)</label>
+                            <input type="number" step="0.01" class="form-control" id="mu" value="0.2" required>
+                        </div>
+                        <div class="form-col">
+                            <label>孔隙度 (phi, 小数)</label>
+                            <input type="number" step="0.01" class="form-control" id="phi" value="0.09" required>
+                        </div>
+                        <div class="form-col">
+                            <label>原油体积系数 (B, 无量纲)</label>
+                            <input type="number" step="0.01" class="form-control" id="B" value="1.55" required>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="param-group">
+                    <h3>测试数据（Δt与pws）</h3>
+                    <label>关井时间Δt（h）与关井井底压力pws（MPa），每行一组数据，用逗号分隔</label>
+                    <textarea class="form-control" id="testData" required>0.00,19.0364
+0.10,21.0772
+0.21,21.7391
+0.31,22.2976
+0.52,22.4010
+0.63,22.4493
+0.73,22.4769
+0.84,22.4976
+0.94,22.5182
+1.05,22.5251
+1.15,22.5320
+1.36,22.5527
+1.68,22.5734
+1.99,22.5872
+2.51,22.6148
+3.04,22.6354
+3.46,22.6561
+4.08,22.6768
+5.03,22.7044
+5.97,22.7320
+6.07,22.7320
+7.01,22.7527
+8.06,22.7733
+9.00,22.7871
+10.05,22.7940
+13.09,22.8216
+16.02,22.8423
+20.00,22.8699
+26.07,22.8906
+31.03,22.9043
+34.98,22.9112
+37.54,22.9112</textarea>
+                    <p class="data-help">示例格式：0.00,19.0364<br>注意：至少需要5组数据以确保计算准确性</p>
+                </div>
+
+                <div class="param-group">
+                    <h3>径向流段设置</h3>
+                    <div class="form-row">
+                        <div class="form-col">
+                            <label>径向流段起始时间 (Δt_start, h)</label>
+                            <input type="number" step="0.01" class="form-control" id="radialStart" value="0.31" required>
+                        </div>
+                        <div class="form-col">
+                            <label>径向流段结束时间 (Δt_end, h)</label>
+                            <input type="number" step="0.01" class="form-control" id="radialEnd" value="10.05" required>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="param-group">
+                    <button type="submit" class="btn">计算分析结果</button>
+                    <button type="reset" class="btn btn-reset">重置参数</button>
+                    <div class="loading" id="loading">正在计算，请稍候...</div>
+                </div>
+            </form>
         </div>
-    </header>
 
-    <!-- 主要内容区 -->
-    <main class="container mx-auto px-4 py-6">
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- 左侧参数输入区 -->
-            <div class="lg:col-span-1 space-y-6">
-                <!-- 基础油藏参数卡片 -->
-                <div class="bg-white rounded-xl p-5 card-shadow transition-all duration-300 hover:shadow-lg">
-                    <h2 class="text-lg font-semibold mb-4 flex items-center">
-                        <i class="fa fa-cogs text-primary mr-2"></i>
-                        基础油藏参数
-                    </h2>
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">粘度 (μ), mPa·s</label>
-                            <input type="number" id="mu" value="0.8" step="0.01" 
-                                class="w-full px-3 py-2 border border-gray-300 rounded-lg input-focus">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">油层有效厚度 (h), m</label>
-                            <input type="number" id="h" value="4.572" step="0.001" 
-                                class="w-full px-3 py-2 border border-gray-300 rounded-lg input-focus">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">井筒半径 (rw), cm</label>
-                            <input type="number" id="rw" value="10.2" step="0.1" 
-                                class="w-full px-3 py-2 border border-gray-300 rounded-lg input-focus">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">综合压缩系数 (Ct), MPa⁻¹</label>
-                            <input type="number" id="Ct" value="0.002177" step="0.000001" 
-                                class="w-full px-3 py-2 border border-gray-300 rounded-lg input-focus">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">孔隙度 (phi)</label>
-                            <input type="number" id="phi" value="0.25" step="0.01" 
-                                class="w-full px-3 py-2 border border-gray-300 rounded-lg input-focus">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">体积系数 (B)</label>
-                            <input type="number" id="B" value="1.25" step="0.01" 
-                                class="w-full px-3 py-2 border border-gray-300 rounded-lg input-focus">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">累积产油量 (Np), m³</label>
-                            <input type="number" id="Np" value="198.75" step="0.01" 
-                                class="w-full px-3 py-2 border border-gray-300 rounded-lg input-focus">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">产量 (Q), m³/d</label>
-                            <input type="number" id="Q" value="19.88" step="0.01" 
-                                class="w-full px-3 py-2 border border-gray-300 rounded-lg input-focus">
-                        </div>
-                    </div>
-                </div>
+        <!-- 分析结果对比表 -->
+        <div class="section" id="resultsSection" style="display: none;">
+            <h2>2. 储层参数分析结果对比</h2>
+            <table class="result-table">
+                <thead>
+                    <tr>
+                        <th>参数名称</th>
+                        <th>Horner方法结果</th>
+                        <th>MDH方法结果</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>径向流段斜率 m (MPa/对数周期)</td>
+                        <td id="mHorner"></td>
+                        <td id="mMDH"></td>
+                    </tr>
+                    <tr>
+                        <td>渗透率 K (mD)</td>
+                        <td id="kHorner"></td>
+                        <td id="kMDH"></td>
+                    </tr>
+                    <tr>
+                        <td>1h时刻井底流压 p₁hr (MPa)</td>
+                        <td id="p1hrHorner"></td>
+                        <td id="p1hrMDH"></td>
+                    </tr>
+                    <tr>
+                        <td>表皮系数 S</td>
+                        <td id="sHorner"></td>
+                        <td id="sMDH"></td>
+                    </tr>
+                    <tr>
+                        <td>表皮压降 ΔpS (MPa)</td>
+                        <td id="dpsHorner"></td>
+                        <td id="dpsMDH"></td>
+                    </tr>
+                    <tr>
+                        <td>原始压力 pi (MPa)</td>
+                        <td id="piHorner"></td>
+                        <td>不适用</td>
+                    </tr>
+                    <tr>
+                        <td>流动效率 FE</td>
+                        <td id="feHorner"></td>
+                        <td id="feMDH"></td>
+                    </tr>
+                    <tr>
+                        <td>理论产量（S=0） qtheory (m³/d)</td>
+                        <td id="qtheoryHorner"></td>
+                        <td id="qtheoryMDH"></td>
+                    </tr>
+                    <tr>
+                        <td>探测半径 r (m)</td>
+                        <td id="rHorner"></td>
+                        <td id="rMDH"></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
 
-                <!-- 压力恢复数据卡片 -->
-                <div class="bg-white rounded-xl p-5 card-shadow transition-all duration-300 hover:shadow-lg">
-                    <h2 class="text-lg font-semibold mb-4 flex items-center">
-                        <i class="fa fa-database text-primary mr-2"></i>
-                        压力恢复数据
-                    </h2>
-                    
-                    <div class="mb-4">
-                        <div class="flex justify-between items-center mb-1">
-                            <label class="block text-sm font-medium text-gray-700">关井时间 (Δt), h</label>
-                        </div>
-                        <textarea id="dtData" rows="4" 
-                            class="w-full px-3 py-2 border border-gray-300 rounded-lg input-focus">0, 2, 3, 4, 5, 8, 10, 12, 19, 24, 36</textarea>
-                        <p class="text-xs text-gray-500 mt-1">请输入逗号分隔的数值，可直接添加或删除数据</p>
-                    </div>
-                    
-                    <div class="mb-6">
-                        <div class="flex justify-between items-center mb-1">
-                            <label class="block text-sm font-medium text-gray-700">井底恢复压力 (p_ws), MPa</label>
-                        </div>
-                        <textarea id="pwsData" rows="4" 
-                            class="w-full px-3 py-2 border border-gray-300 rounded-lg input-focus">9.536, 10.542, 10.576, 10.597, 10.611, 10.652, 10.672, 10.686, 10.721, 10.742, 10.769</textarea>
-                        <p class="text-xs text-gray-500 mt-1">请输入逗号分隔的数值，与关井时间数据一一对应</p>
-                    </div>
-
-                    <!-- 压力查询区域 -->
-                    <div class="border-t border-gray-200 pt-4">
-                        <h3 class="text-md font-medium mb-3 flex items-center">
-                            <i class="fa fa-search text-primary mr-2"></i>
-                            压力查询
-                        </h3>
-                        <div class="flex space-x-2">
-                            <input type="number" id="queryDt" placeholder="输入关井时间 (h)" step="0.1"
-                                class="flex-1 px-3 py-2 border border-gray-300 rounded-lg input-focus">
-                            <button id="queryBtn" class="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg transition-all duration-300">
-                                <i class="fa fa-search"></i>
-                            </button>
-                        </div>
-                        <div id="queryResult" class="mt-3 p-3 rounded-lg hidden">
-                            <p class="text-sm font-medium" id="queryResultText"></p>
-                        </div>
-                    </div>
-                </div>
+        <!-- 优化后的单对数图展示 -->
+        <div class="section" id="chartsSection" style="display: none;">
+            <h2>3. 单对数分析图</h2>
+            <div class="chart-container">
+                <h3>Horner单对数图（pws vs (tp+Δt)/Δt）</h3>
+                <p class="axis-note">横坐标为对数刻度（10的幂次），例如"10¹"表示10¹=10，"10²"表示10²=100</p>
+                <canvas id="hornerChart"></canvas>
             </div>
-
-            <!-- 右侧结果展示区 -->
-            <div class="lg:col-span-2 space-y-6">
-                <!-- 图表展示 -->
-                <div class="bg-white rounded-xl p-5 card-shadow transition-all duration-300 hover:shadow-lg">
-                    <h2 class="text-lg font-semibold mb-4 flex items-center">
-                        <i class="fa fa-area-chart text-primary mr-2"></i>
-                        压力恢复分析曲线
-                    </h2>
-                    <div class="h-[400px]">
-                        <canvas id="semilogChart"></canvas>
-                    </div>
-                    <div id="analysisRationale" class="mt-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
-                        分析依据：请点击"开始分析"按钮查看结果
-                    </div>
-                </div>
-
-                <!-- 参数结果表格 -->
-                <div class="bg-white rounded-xl p-5 card-shadow transition-all duration-300 hover:shadow-lg">
-                    <h2 class="text-lg font-semibold mb-4 flex items-center">
-                        <i class="fa fa-table text-primary mr-2"></i>
-                        分析结果
-                    </h2>
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead>
-                                <tr>
-                                    <th class="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">参数名称</th>
-                                    <th class="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">数值</th>
-                                    <th class="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">单位</th>
-                                </tr>
-                            </thead>
-                            <tbody id="resultsTable" class="bg-white divide-y divide-gray-200">
-                                <!-- 结果将通过JavaScript动态填充 -->
-                                <tr>
-                                    <td colspan="3" class="px-4 py-8 text-center text-gray-500">请点击"开始分析"按钮查看结果</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- 回归方程信息 -->
-                <div id="regressionEquation" class="bg-white rounded-xl p-5 card-shadow transition-all duration-300 hover:shadow-lg hidden">
-                    <h2 class="text-lg font-semibold mb-4 flex items-center">
-                        <i class="fa fa-calculator text-primary mr-2"></i>
-                        回归方程
-                    </h2>
-                    <div class="p-4 bg-gray-50 rounded-lg text-center text-lg font-medium" id="equationContent">
-                        <!-- 回归方程将通过JavaScript动态填充 -->
-                    </div>
-                </div>
+            
+            <div class="chart-container">
+                <h3>MDH单对数图（pws vs Δt）</h3>
+                <p class="axis-note">横坐标为对数刻度（10的幂次），例如"10⁰"表示10⁰=1，"10¹"表示10¹=10</p>
+                <canvas id="mdhChart"></canvas>
             </div>
         </div>
-    </main>
-
-    <!-- 页脚 -->
-    <footer class="bg-white mt-8 py-6 border-t border-gray-200">
-        <div class="container mx-auto px-4 text-center text-gray-500 text-sm">
-            <p>压力恢复试井智能分析工具 &copy; 2023</p>
-        </div>
-    </footer>
+    </div>
 
     <script>
-        // 全局变量存储图表实例和分析结果
-        let semilogChart = null;
-        let analysisResults = null; // 用于存储分析结果供查询使用
-        let queryPoint = null; // 存储当前查询点
-        
+        // 全局变量存储图表实例
+        let hornerChart = null;
+        let mdhChart = null;
+
         // 页面加载完成后初始化
         document.addEventListener('DOMContentLoaded', function() {
-            // 绑定计算按钮事件
-            document.getElementById('calculateBtn').addEventListener('click', performAnalysis);
-            // 绑定查询按钮事件
-            document.getElementById('queryBtn').addEventListener('click', queryPressure);
-            // 支持回车键查询
-            document.getElementById('queryDt').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    queryPressure();
-                }
+            const form = document.getElementById('wellParametersForm');
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                calculateResults();
             });
         });
-        
-        // 执行压力恢复分析
-        function performAnalysis() {
-            // 重置查询点
-            queryPoint = null;
-            
-            // 读取用户输入的参数
-            const params = {
-                mu: parseFloat(document.getElementById('mu').value),
-                h: parseFloat(document.getElementById('h').value),
-                rw: parseFloat(document.getElementById('rw').value),
-                Ct: parseFloat(document.getElementById('Ct').value),
-                phi: parseFloat(document.getElementById('phi').value),
-                B: parseFloat(document.getElementById('B').value),
-                Np: parseFloat(document.getElementById('Np').value),
-                Q: parseFloat(document.getElementById('Q').value),
-                dt: parseInputArray(document.getElementById('dtData').value),
-                p_ws: parseInputArray(document.getElementById('pwsData').value)
-            };
-            
-            // 验证输入数据
-            if (!validateInput(params)) {
-                return;
+
+        // 线性回归拟合函数
+        function linearRegression(xData, yData) {
+            const n = xData.length;
+            if (n < 2) {
+                throw new Error("径向流段数据不足，无法进行线性回归。请检查径向流段设置或测试数据。");
             }
             
-            // 执行分析步骤
-            // 计算折算生产时间 tp
-            const tp = (params.Np / params.Q) * 24; // 单位: 小时
+            const sumX = xData.reduce((a, b) => a + b, 0);
+            const sumY = yData.reduce((a, b) => a + b, 0);
+            const sumXY = xData.reduce((a, b, i) => a + b * yData[i], 0);
+            const sumX2 = xData.reduce((a, b) => a + b * b, 0);
             
-            // 计算横坐标 x = Δt/(tp+Δt) (排除Δt=0点)
-            const idx = params.dt.map(val => val > 0);
-            const x = [];
-            const ln_x = [];
-            const p_ws_reg = [];
+            const denominator = n * sumX2 - sumX * sumX;
+            if (denominator === 0) {
+                throw new Error("无法进行线性回归，x值可能全部相同。");
+            }
             
-            for (let i = 0; i < params.dt.length; i++) {
-                if (idx[i]) {
-                    const xi = params.dt[i] / (tp + params.dt[i]);
-                    x.push(xi);
-                    ln_x.push(Math.log(xi));
-                    p_ws_reg.push(params.p_ws[i]);
+            const k = (n * sumXY - sumX * sumY) / denominator;
+            const b = (sumY - k * sumX) / n;
+            const yFit = xData.map(x => k * x + b);
+            
+            return { k, b, yFit };
+        }
+
+        // 解析测试数据
+        function parseTestData(dataStr) {
+            const lines = dataStr.trim().split('\n');
+            const Delta_t = [];
+            const pws = [];
+            
+            lines.forEach((line, index) => {
+                const parts = line.trim().split(',').map(p => parseFloat(p.trim()));
+                if (parts.length !== 2 || isNaN(parts[0]) || isNaN(parts[1])) {
+                    throw new Error(`测试数据格式错误，第${index + 1}行：${line}`);
                 }
+                Delta_t.push(parts[0]);
+                pws.push(parts[1]);
+            });
+            
+            if (Delta_t.length < 5) {
+                throw new Error("测试数据不足，至少需要5组数据。");
             }
             
-            // 线性回归: p_ws = a*ln(x) + b
-            const [a, b] = performRegression(ln_x, p_ws_reg);
-            
-            // 计算关键参数
-            const m = a * 2.302585; // 半对数直线斜率
-            const K = 2.1208 * params.Q * params.B * params.mu / (params.h * m); // 渗透率 (10^{-3} μm²)
-            const p_wf = params.p_ws[0]; // 关井前井底压力 (Δt=0)
-            const log_term = Math.log10(K / (params.phi * params.mu * params.Ct * 1000 * params.rw * params.rw)); // 对数项
-            
-            // 计算 p_ws(1h)
-            const x_1h = 1 / (tp + 1); // Δt=1h 时的x值
-            const p_ws_1h = b + a * Math.log(x_1h); 
-            
-            // 计算表皮系数 S
-            const S = 1.152 * ((p_ws_1h - p_wf) / m - log_term - 1.9077);
-            
-            // 保存分析结果供查询使用
-            analysisResults = {
-                a, b, tp,
-                params: { ...params } // 保存参数副本
-            };
-            
-            // 显示结果
-            displayResults(
-                params.dt, params.p_ws, x, ln_x, p_ws_reg,
-                a, b, m, K, S, tp, p_ws_1h, p_wf
-            );
+            return { Delta_t, pws };
         }
-        
-        // 查询关井时间对应的井底压力并在图表上标记
-        function queryPressure() {
-            // 检查是否已进行分析
-            if (!analysisResults) {
-                showQueryResult("请先点击'开始分析'按钮完成分析", false);
-                return;
-            }
-            
-            // 获取用户输入的关井时间
-            const dtInput = document.getElementById('queryDt');
-            const dt = parseFloat(dtInput.value);
-            
-            // 验证输入
-            if (isNaN(dt) || dt < 0) {
-                showQueryResult("请输入有效的关井时间（非负数值）", false);
-                return;
-            }
-            
-            // 使用回归方程计算对应压力
-            const { a, b, tp } = analysisResults;
-            const x = dt / (tp + dt);
-            const pressure = b + a * Math.log(x);
-            
-            // 保存查询点数据
-            queryPoint = {
-                dt: dt,
-                x: x,
-                pressure: pressure
-            };
-            
-            // 更新图表显示查询点
-            updateChartWithQueryPoint();
-            
-            // 显示查询结果
-            showQueryResult(`关井时间 ${dt} h 对应的井底压力为: <strong>${pressure.toFixed(4)} MPa</strong>`, true);
-        }
-        
-        // 在图表上更新查询点标记
-        function updateChartWithQueryPoint() {
-            if (!semilogChart || !queryPoint) return;
-            
-            // 检查是否已有查询点数据集，没有则创建
-            if (semilogChart.data.datasets.length < 3) {
-                semilogChart.data.datasets.push({
-                    label: '查询点',
-                    data: [],
-                    backgroundColor: 'rgba(255, 125, 0, 1)', // 橙色
-                    borderColor: 'rgba(255, 125, 0, 1)',
-                    borderWidth: 2,
-                    pointRadius: 8,
-                    pointHoverRadius: 10,
-                    showLine: false,
-                    pointStyle: 'star' // 使用星形标记查询点
-                });
-            }
-            
-            // 更新查询点数据
-            semilogChart.data.datasets[2].data = [{
-                x: queryPoint.x,
-                y: queryPoint.pressure
-            }];
-            
-            // 更新图表
-            semilogChart.update();
-        }
-        
-        // 显示查询结果
-        function showQueryResult(text, isSuccess) {
-            const resultElement = document.getElementById('queryResult');
-            const resultTextElement = document.getElementById('queryResultText');
-            
-            // 设置结果文本和样式
-            resultTextElement.innerHTML = text;
-            resultElement.className = `mt-3 p-3 rounded-lg ${isSuccess ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`;
-            resultElement.classList.remove('hidden');
-        }
-        
-        // 解析输入的数组字符串
-        function parseInputArray(inputStr) {
-            return inputStr.split(',').map(item => parseFloat(item.trim())).filter(num => !isNaN(num));
-        }
-        
-        // 验证输入数据
-        function validateInput(params) {
-            // 检查基本参数是否有效
-            const requiredParams = ['mu', 'h', 'rw', 'Ct', 'phi', 'B', 'Np', 'Q'];
-            for (const param of requiredParams) {
-                if (isNaN(params[param]) || params[param] <= 0) {
-                    alert(`参数 ${param} 输入无效，请检查`);
-                    return false;
+
+        // 计算分析结果
+        function calculateResults() {
+            try {
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('resultsSection').style.display = 'none';
+                document.getElementById('chartsSection').style.display = 'none';
+
+                // 获取输入参数
+                const q = parseFloat(document.getElementById('q').value);
+                const tp = parseFloat(document.getElementById('tp').value);
+                const pwf_tp = parseFloat(document.getElementById('pwf_tp').value);
+                const rw = parseFloat(document.getElementById('rw').value);
+                const Ct = parseFloat(document.getElementById('Ct').value);
+                const h = parseFloat(document.getElementById('h').value);
+                const mu = parseFloat(document.getElementById('mu').value);
+                const phi = parseFloat(document.getElementById('phi').value);
+                const B = parseFloat(document.getElementById('B').value);
+                const radialStart = parseFloat(document.getElementById('radialStart').value);
+                const radialEnd = parseFloat(document.getElementById('radialEnd').value);
+                
+                // 解析测试数据
+                const testDataStr = document.getElementById('testData').value;
+                const { Delta_t, pws } = parseTestData(testDataStr);
+                const Delta_t_max = Math.max(...Delta_t);
+
+                // 数据预处理
+                const horner_time = Delta_t.map(dt => dt === 0 ? NaN : (tp + dt) / dt);
+                const radial_idx = Delta_t.map((dt, i) => dt >= radialStart && dt <= radialEnd ? i : -1).filter(i => i !== -1);
+                if (radial_idx.length < 2) {
+                    throw new Error("径向流段数据点不足，请调整径向流段的起始和结束时间。");
                 }
+                
+                const Delta_t_radial = radial_idx.map(i => Delta_t[i]);
+                const pws_radial = radial_idx.map(i => pws[i]);
+                const horner_time_radial = radial_idx.map(i => horner_time[i]);
+
+                // Horner方法计算
+                const x_horner = horner_time_radial.map(t => Math.log10(t));
+                const y_horner = pws_radial;
+                const hornerFit = linearRegression(x_horner, y_horner);
+                const m_horner = hornerFit.k, b_horner = hornerFit.b;
+                const y_horner_fit = hornerFit.yFit;
+
+                const K_horner = 2.1206 * q * mu * B / (Math.abs(m_horner) * h);
+                const horner_time_1h = (tp + 1) / 1;
+                const x_horner_1h = Math.log10(horner_time_1h);
+                const p1hr_horner = m_horner * x_horner_1h + b_horner;
+                const term_horner = K_horner / (phi * mu * Ct * rw ** 2);
+                const S_horner = 1.1513 * ((p1hr_horner - pwf_tp) / Math.abs(m_horner) - Math.log10(term_horner) + 2.0923);
+                const Delta_ps_horner = 0.8686 * Math.abs(m_horner) * S_horner;
+                const horner_time_pi = 1;
+                const x_horner_pi = Math.log10(horner_time_pi);
+                const pi = m_horner * x_horner_pi + b_horner;
+                const FE_horner = 1 - Delta_ps_horner / (pi - pwf_tp);
+                const q_theory_horner = q * (pi - pwf_tp) / (pi - pwf_tp - Delta_ps_horner);
+                const r1 = 0.12 * Math.sqrt(K_horner * Delta_t_max / (phi * mu * Ct));
+
+                // MDH方法计算
+                const x_mdh = Delta_t_radial.map(t => Math.log10(t));
+                const y_mdh = pws_radial;
+                const mdhFit = linearRegression(x_mdh, y_mdh);
+                const m_mdh = mdhFit.k, b_mdh = mdhFit.b;
+                const y_mdh_fit = mdhFit.yFit;
+
+                const K_mdh = 2.1206 * q * mu * B / (m_mdh * h);
+                const x_mdh_1h = Math.log10(1);
+                const p1hr_mdh = m_mdh * x_mdh_1h + b_mdh;
+                const term_mdh = K_mdh / (phi * mu * Ct * rw ** 2);
+                const S_mdh = 1.1513 * ((p1hr_mdh - pwf_tp) / m_mdh - Math.log10(term_mdh) + 2.0923);
+                const Delta_ps_mdh = 0.8686 * m_mdh * S_mdh;
+                const FE_mdh = 1 - Delta_ps_mdh / (pi - pwf_tp);
+                const q_theory_mdh = q * (pi - pwf_tp) / (pi - pwf_tp - Delta_ps_mdh);
+                const r = 0.12 * Math.sqrt(K_mdh * Delta_t_max / (phi * mu * Ct));
+
+                // 填充结果
+                document.getElementById('mHorner').textContent = m_horner.toFixed(4);
+                document.getElementById('kHorner').textContent = K_horner.toFixed(2);
+                document.getElementById('p1hrHorner').textContent = p1hr_horner.toFixed(2);
+                document.getElementById('sHorner').textContent = S_horner.toFixed(2);
+                document.getElementById('dpsHorner').textContent = Delta_ps_horner.toFixed(3);
+                document.getElementById('piHorner').textContent = pi.toFixed(2);
+                document.getElementById('feHorner').textContent = FE_horner.toFixed(2);
+                document.getElementById('qtheoryHorner').textContent = Math.round(q_theory_horner);
+                document.getElementById('rHorner').textContent = r1.toFixed(1);
+
+                document.getElementById('mMDH').textContent = m_mdh.toFixed(4);
+                document.getElementById('kMDH').textContent = K_mdh.toFixed(2);
+                document.getElementById('p1hrMDH').textContent = p1hr_mdh.toFixed(2);
+                document.getElementById('sMDH').textContent = S_mdh.toFixed(2);
+                document.getElementById('dpsMDH').textContent = Delta_ps_mdh.toFixed(3);
+                document.getElementById('feMDH').textContent = FE_mdh.toFixed(2);
+                document.getElementById('qtheoryMDH').textContent = Math.round(q_theory_mdh);
+                document.getElementById('rMDH').textContent = r.toFixed(1);
+
+                // 绘制图表
+                drawHornerChart(horner_time, pws, horner_time_radial, y_horner_fit, 
+                               horner_time_1h, p1hr_horner, horner_time_pi, pi, m_horner);
+                               
+                drawMDHChart(Delta_t, pws, Delta_t_radial, y_mdh_fit, 1, p1hr_mdh, m_mdh);
+
+                // 显示结果区域
+                document.getElementById('resultsSection').style.display = 'block';
+                document.getElementById('chartsSection').style.display = 'block';
+
+            } catch (error) {
+                alert('计算出错: ' + error.message);
+                console.error(error);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
             }
-            
-            // 检查时间和压力数据
-            if (params.dt.length === 0 || params.p_ws.length === 0) {
-                alert('请输入关井时间和恢复压力数据');
-                return false;
-            }
-            
-            if (params.dt.length !== params.p_ws.length) {
-                alert('关井时间和恢复压力数据的数量必须一致');
-                return false;
-            }
-            
-            // 检查是否包含Δt=0的数据点
-            if (!params.dt.includes(0)) {
-                alert('关井时间数据必须包含0值（表示关井前的时刻）');
-                return false;
-            }
-            
-            return true;
         }
-        
-        // 执行回归分析
-        function performRegression(x, y) {
-            // 线性回归: y = a*x + b
-            let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
-            const n = x.length;
+
+        // 绘制优化后的Horner单对数图
+        function drawHornerChart(horner_time, pws, horner_time_radial, y_horner_fit, 
+                               horner_time_1h, p1hr_horner, horner_time_pi, pi, m_horner) {
+            const ctx = document.getElementById('hornerChart').getContext('2d');
             
-            for (let i = 0; i < n; i++) {
-                sumX += x[i];
-                sumY += y[i];
-                sumXY += x[i] * y[i];
-                sumX2 += x[i] * x[i];
+            if (hornerChart) {
+                hornerChart.destroy();
             }
             
-            // 计算系数
-            const a = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
-            const b = (sumY - a * sumX) / n;
-            
-            return [a, b];
-        }
-        
-        // 显示分析结果
-        function displayResults(dt, p_ws, x, ln_x, p_ws_reg, a, b, m, K, S, tp, p_ws_1h, p_wf) {
-            // 更新分析依据
-            document.getElementById('analysisRationale').textContent = 
-                `分析依据：采用半对数坐标回归模型 p_ws = a*ln(x) + b，其中 x = Δt/(tp+Δt)，tp = ${tp.toFixed(2)} h`;
-            
-            // 绘制图表
-            plotChart(x, ln_x, p_ws_reg, a, b);
-            
-            // 如果有查询点，更新图表显示
-            if (queryPoint) {
-                updateChartWithQueryPoint();
-            }
-            
-            // 更新结果表格
-            updateResultsTable(a, b, m, K, S, tp, p_ws_1h, p_wf);
-            
-            // 显示回归方程
-            document.getElementById('equationContent').textContent = 
-                `p_ws = ${a.toFixed(4)} × ln(x) + ${b.toFixed(4)}`;
-            document.getElementById('regressionEquation').classList.remove('hidden');
-        }
-        
-        // 绘制压力恢复曲线图表
-        function plotChart(x, ln_x, p_ws_reg, a, b) {
-            // 生成拟合曲线数据
-            const ln_x_min = Math.min(...ln_x);
-            const ln_x_max = Math.max(...ln_x);
-            const ln_x_fit = [];
-            
-            for (let i = 0; i < 100; i++) {
-                ln_x_fit.push(ln_x_min + (ln_x_max - ln_x_min) * i / 99);
-            }
-            
-            // 计算拟合值
-            const p_ws_fit = ln_x_fit.map(val => b + a * val);
-            const x_fit = ln_x_fit.map(val => Math.exp(val)); // x = exp(ln_x)
-            
-            // 计算10的幂级数刻度
-            const xValues = [...x, ...x_fit];
-            const minX = Math.min(...xValues);
-            const maxX = Math.max(...xValues);
-            const minExp = Math.floor(Math.log10(minX));
-            const maxExp = Math.ceil(Math.log10(maxX));
-            
-            // 生成10的幂级数刻度
-            const ticks = [];
-            for (let exp = minExp; exp <= maxExp; exp++) {
-                ticks.push(Math.pow(10, exp));
-            }
-            
-            // 绘制半对数坐标图
-            const semilogCtx = document.getElementById('semilogChart').getContext('2d');
-            if (semilogChart) {
-                semilogChart.destroy();
-            }
-            
-            // 准备数据集，包括查询点数据集（可能为空）
-            const datasets = [
-                // 实测数据
-                {
-                    label: '实测数据',
-                    data: x.map((val, i) => ({x: val, y: p_ws_reg[i]})),
-                    backgroundColor: 'rgba(0, 0, 255, 1)',
-                    borderColor: 'rgba(0, 0, 255, 1)',
-                    borderWidth: 1,
-                    pointRadius: 5,
-                    pointHoverRadius: 7,
-                    showLine: false
+            // 纵坐标范围调整：比最小值小0.5，比最大值大0.5
+            const allYValues = [...pws, ...y_horner_fit, p1hr_horner, pi];
+            const yMin = Math.min(...allYValues) - 0.5;
+            const yMax = Math.max(...allYValues) + 0.5;
+
+            hornerChart = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [
+                        {
+                            label: '实测数据',
+                            data: horner_time.map((t, i) => ({ x: t, y: pws[i] })).filter(d => !isNaN(d.x) && d.x > 0),
+                            backgroundColor: 'rgba(54, 162, 235, 0.8)', // 蓝色
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 2,
+                            pointRadius: 6,
+                            pointHoverRadius: 8,
+                            pointHoverBorderWidth: 2
+                        },
+                        {
+                            label: '径向流段拟合线',
+                            data: horner_time_radial.map((t, i) => ({ x: t, y: y_horner_fit[i] })),
+                            type: 'line',
+                            borderColor: 'rgba(255, 99, 132, 1)', // 红色
+                            borderWidth: 3,
+                            borderDash: [5, 0],
+                            fill: false,
+                            tension: 0
+                        },
+                        {
+                            label: `1h压力: ${p1hr_horner.toFixed(2)} MPa`,
+                            data: [{ x: horner_time_1h, y: p1hr_horner }],
+                            backgroundColor: 'rgba(75, 192, 192, 0.8)', // 青色
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 2,
+                            pointRadius: 8,
+                            pointHoverRadius: 10,
+                            pointShape: 'square'
+                        },
+                        {
+                            label: `原始压力pi: ${pi.toFixed(2)} MPa`,
+                            data: [{ x: horner_time_pi, y: pi }],
+                            backgroundColor: 'rgba(255, 159, 64, 0.8)', // 橙色
+                            borderColor: 'rgba(255, 159, 64, 1)',
+                            borderWidth: 2,
+                            pointRadius: 8,
+                            pointHoverRadius: 10,
+                            pointShape: 'diamond'
+                        }
+                    ]
                 },
-                // 回归曲线
-                {
-                    label: '回归曲线',
-                    data: x_fit.map((val, i) => ({x: val, y: p_ws_fit[i]})),
-                    backgroundColor: 'rgba(255, 0, 0, 0)',
-                    borderColor: 'rgba(255, 0, 0, 1)',
-                    borderWidth: 2,
-                    pointRadius: 0,
-                    tension: 0.1
-                }
-            ];
-            
-            // 如果有查询点，添加查询点数据集
-            if (queryPoint) {
-                datasets.push({
-                    label: '查询点',
-                    data: [{x: queryPoint.x, y: queryPoint.pressure}],
-                    backgroundColor: 'rgba(255, 125, 0, 1)', // 橙色
-                    borderColor: 'rgba(255, 125, 0, 1)',
-                    borderWidth: 2,
-                    pointRadius: 8,
-                    pointHoverRadius: 10,
-                    showLine: false,
-                    pointStyle: 'star' // 使用星形标记查询点
-                });
-            }
-            
-            semilogChart = new Chart(semilogCtx, {
-                type: 'line',
-                data: { datasets },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
                     scales: {
                         x: {
                             type: 'logarithmic',
-                            title: {
-                                display: true,
-                                text: 'Δt/(tp+Δt)'
+                            title: { 
+                                display: true, 
+                                text: 'Horner时间 (tp+Δt)/Δt（对数刻度）', 
+                                font: { size: 16, weight: 'bold' },
+                                padding: { bottom: 15 }
                             },
-                            ticks: {
-                                // 使用10的幂级数作为刻度
+                            ticks: { 
+                                font: { size: 13 },
+                                color: '#333',
                                 callback: function(value) {
-                                    const exp = Math.log10(value);
-                                    if (exp === Math.floor(exp)) {
-                                        return '10^' + exp;
+                                    const exponent = Math.log10(value);
+                                    if (Math.abs(exponent - Math.round(exponent)) < 0.001) {
+                                        return `10^${Math.round(exponent)}`;
                                     }
-                                    return ''; // 只显示10的幂级数刻度
-                                },
-                                stepSize: 1,
-                                autoSkip: false
-                            }
+                                    return '';
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.08)',
+                                lineWidth: 1.5
+                            },
+                            min: Math.min(...horner_time.filter(t => !isNaN(t) && t > 0)) * 0.3,
+                            max: Math.max(...horner_time.filter(t => !isNaN(t) && t > 0)) * 3
                         },
                         y: {
-                            title: {
-                                display: true,
-                                text: '井底恢复压力 p_ws (MPa)'
-                            }
+                            title: { 
+                                display: true, 
+                                text: '关井井底压力pws (MPa)', 
+                                font: { size: 16, weight: 'bold' },
+                                padding: { top: 15 }
+                            },
+                            ticks: { font: { size: 13 }, color: '#333' },
+                            grid: { color: 'rgba(0, 0, 0, 0.08)', lineWidth: 1.5 },
+                            min: yMin,
+                            max: yMax
                         }
                     },
                     plugins: {
-                        legend: {
-                            position: 'bottom'
+                        title: { 
+                            display: true, 
+                            text: '压力恢复试井Horner单对数分析图', 
+                            font: { size: 18, weight: 'bold' },
+                            padding: { bottom: 20, top: 10 }
                         },
-                        title: {
-                            display: true,
-                            text: '半对数坐标回归曲线'
+                        legend: { 
+                            position: 'top', 
+                            labels: { 
+                                font: { size: 14 },
+                                padding: 20,
+                                usePointStyle: true,
+                                pointStyleWidth: 10
+                            }
                         },
                         tooltip: {
-                            callbacks: {
-                                // 为查询点添加特殊提示
-                                label: function(context) {
-                                    if (context.dataset.label === '查询点' && queryPoint) {
-                                        return [
-                                            `关井时间: ${queryPoint.dt} h`,
-                                            `井底压力: ${queryPoint.pressure.toFixed(4)} MPa`
-                                        ];
-                                    }
-                                    return context.dataset.label + ': ' + context.raw.y.toFixed(4) + ' MPa';
+                            titleFont: { size: 14 },
+                            bodyFont: { size: 13 },
+                            padding: 12,
+                            cornerRadius: 6
+                        },
+                        annotation: {
+                            annotations: {
+                                // 斜率标注优化
+                                slopeAnnotation: {
+                                    type: 'text',
+                                    xValue: Math.max(...horner_time.filter(t => !isNaN(t) && t > 0)) * 0.7, 
+                                    yValue: yMin + (yMax - yMin) * 0.2,
+                                    content: `斜率 m = ${m_horner.toFixed(4)} MPa/对数周期`,
+                                    font: { size: 15, weight: 'bold', color: 'rgba(153, 102, 255, 1)' },
+                                    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                                    borderColor: 'rgba(153, 102, 255, 0.5)',
+                                    borderWidth: 2,
+                                    padding: 10,
+                                    borderRadius: 6,
+                                    display: true
                                 }
                             }
+                        }
+                    },
+                    interaction: { mode: 'index', intersect: false },
+                    maintainAspectRatio: false,
+                    // 图表布局优化
+                    layout: {
+                        padding: {
+                            left: 20,
+                            right: 20,
+                            top: 20,
+                            bottom: 20
                         }
                     }
                 }
             });
         }
-        
-        // 更新结果表格
-        function updateResultsTable(a, b, m, K, S, tp, p_ws_1h, p_wf) {
-            const resultsTable = document.getElementById('resultsTable');
+
+        // 绘制优化后的MDH单对数图
+        function drawMDHChart(Delta_t, pws, Delta_t_radial, y_mdh_fit, delta_t_1h, p1hr_mdh, m_mdh) {
+            const ctx = document.getElementById('mdhChart').getContext('2d');
             
-            // 更新表格内容
-            resultsTable.innerHTML = `
-                <tr>
-                    <td class="px-4 py-3 whitespace-nowrap">折算生产时间 (tp)</td>
-                    <td class="px-4 py-3 whitespace-nowrap font-medium">${tp.toFixed(2)}</td>
-                    <td class="px-4 py-3 whitespace-nowrap">h</td>
-                </tr>
-                <tr>
-                    <td class="px-4 py-3 whitespace-nowrap">回归方程斜率 (a)</td>
-                    <td class="px-4 py-3 whitespace-nowrap font-medium">${a.toFixed(4)}</td>
-                    <td class="px-4 py-3 whitespace-nowrap">MPa</td>
-                </tr>
-                <tr>
-                    <td class="px-4 py-3 whitespace-nowrap">回归方程截距 (b)</td>
-                    <td class="px-4 py-3 whitespace-nowrap font-medium">${b.toFixed(4)}</td>
-                    <td class="px-4 py-3 whitespace-nowrap">MPa</td>
-                </tr>
-                <tr>
-                    <td class="px-4 py-3 whitespace-nowrap">半对数斜率 (m)</td>
-                    <td class="px-4 py-3 whitespace-nowrap font-medium">${m.toFixed(4)}</td>
-                    <td class="px-4 py-3 whitespace-nowrap">MPa</td>
-                </tr>
-                <tr>
-                    <td class="px-4 py-3 whitespace-nowrap">地层渗透率 (K)</td>
-                    <td class="px-4 py-3 whitespace-nowrap font-medium text-primary">${K.toFixed(2)}</td>
-                    <td class="px-4 py-3 whitespace-nowrap">×10⁻³μm²</td>
-                </tr>
-                <tr>
-                    <td class="px-4 py-3 whitespace-nowrap">表皮系数 (S)</td>
-                    <td class="px-4 py-3 whitespace-nowrap font-medium text-primary">${S.toFixed(2)}</td>
-                    <td class="px-4 py-3 whitespace-nowrap">-</td>
-                </tr>
-                <tr>
-                    <td class="px-4 py-3 whitespace-nowrap">关井前井底压力 (p_wf)</td>
-                    <td class="px-4 py-3 whitespace-nowrap font-medium">${p_wf.toFixed(3)}</td>
-                    <td class="px-4 py-3 whitespace-nowrap">MPa</td>
-                </tr>
-                <tr>
-                    <td class="px-4 py-3 whitespace-nowrap">关井1h压力 (p_ws(1h))</td>
-                    <td class="px-4 py-3 whitespace-nowrap font-medium">${p_ws_1h.toFixed(3)}</td>
-                    <td class="px-4 py-3 whitespace-nowrap">MPa</td>
-                </tr>
-            `;
+            if (mdhChart) {
+                mdhChart.destroy();
+            }
+            
+            // 纵坐标范围调整：比最小值小0.5，比最大值大0.5
+            const allYValues = [...pws, ...y_mdh_fit, p1hr_mdh];
+            const yMin = Math.min(...allYValues) - 0.5;
+            const yMax = Math.max(...allYValues) + 0.5;
+
+            mdhChart = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [
+                        {
+                            label: '实测数据',
+                            data: Delta_t.map((t, i) => ({ x: t, y: pws[i] })).filter(d => d.x > 0),
+                            backgroundColor: 'rgba(54, 162, 235, 0.8)', // 蓝色
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 2,
+                            pointRadius: 6,
+                            pointHoverRadius: 8,
+                            pointHoverBorderWidth: 2
+                        },
+                        {
+                            label: '径向流段拟合线',
+                            data: Delta_t_radial.map((t, i) => ({ x: t, y: y_mdh_fit[i] })),
+                            type: 'line',
+                            borderColor: 'rgba(59, 130, 246, 1)', // 深蓝色
+                            borderWidth: 3,
+                            borderDash: [5, 0],
+                            fill: false,
+                            tension: 0
+                        },
+                        {
+                            label: `1h压力: ${p1hr_mdh.toFixed(2)} MPa`,
+                            data: [{ x: delta_t_1h, y: p1hr_mdh }],
+                            backgroundColor: 'rgba(75, 192, 192, 0.8)', // 青色
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 2,
+                            pointRadius: 8,
+                            pointHoverRadius: 10,
+                            pointShape: 'square'
+                        }
+                    ]
+                },
+                options: {
+                    scales: {
+                        x: {
+                            type: 'logarithmic',
+                            title: { 
+                                display: true, 
+                                text: '关井时间Δt (h，对数刻度)', 
+                                font: { size: 16, weight: 'bold' },
+                                padding: { bottom: 15 }
+                            },
+                            ticks: { 
+                                font: { size: 13 },
+                                color: '#333',
+                                callback: function(value) {
+                                    const exponent = Math.log10(value);
+                                    if (Math.abs(exponent - Math.round(exponent)) < 0.001) {
+                                        return `10^${Math.round(exponent)}`;
+                                    }
+                                    return '';
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.08)',
+                                lineWidth: 1.5
+                            },
+                            min: Math.min(...Delta_t.filter(t => t > 0)) * 0.3,
+                            max: Math.max(...Delta_t.filter(t => t > 0)) * 3
+                        },
+                        y: {
+                            title: { 
+                                display: true, 
+                                text: '关井井底压力pws (MPa)', 
+                                font: { size: 16, weight: 'bold' },
+                                padding: { top: 15 }
+                            },
+                            ticks: { font: { size: 13 }, color: '#333' },
+                            grid: { color: 'rgba(0, 0, 0, 0.08)', lineWidth: 1.5 },
+                            min: yMin,
+                            max: yMax
+                        }
+                    },
+                    plugins: {
+                        title: { 
+                            display: true, 
+                            text: '压力恢复试井MDH单对数分析图', 
+                            font: { size: 18, weight: 'bold' },
+                            padding: { bottom: 20, top: 10 }
+                        },
+                        legend: { 
+                            position: 'top', 
+                            labels: { 
+                                font: { size: 14 },
+                                padding: 20,
+                                usePointStyle: true,
+                                pointStyleWidth: 10
+                            }
+                        },
+                        tooltip: {
+                            titleFont: { size: 14 },
+                            bodyFont: { size: 13 },
+                            padding: 12,
+                            cornerRadius: 6
+                        },
+                        annotation: {
+                            annotations: {
+                                // 斜率标注优化
+                                slopeAnnotation: {
+                                    type: 'text',
+                                    xValue: Math.max(...Delta_t.filter(t => t > 0)) * 0.7, 
+                                    yValue: yMin + (yMax - yMin) * 0.2,
+                                    content: `斜率 m = ${m_mdh.toFixed(4)} MPa/对数周期`,
+                                    font: { size: 15, weight: 'bold', color: 'rgba(153, 102, 255, 1)' },
+                                    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                                    borderColor: 'rgba(153, 102, 255, 0.5)',
+                                    borderWidth: 2,
+                                    padding: 10,
+                                    borderRadius: 6,
+                                    display: true
+                                }
+                            }
+                        }
+                    },
+                    interaction: { mode: 'index', intersect: false },
+                    maintainAspectRatio: false,
+                    // 图表布局优化
+                    layout: {
+                        padding: {
+                            left: 20,
+                            right: 20,
+                            top: 20,
+                            bottom: 20
+                        }
+                    }
+                }
+            });
         }
     </script>
 </body>
